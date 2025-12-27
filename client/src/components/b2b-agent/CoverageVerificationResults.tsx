@@ -9,6 +9,7 @@ interface CoverageVerificationResultsProps {
   onClose: () => void;
   patientName?: string;
   patient?: Patient;
+  onTransactionCreated?: () => void;
 }
 
 type Step = 'step1' | 'step2' | 'step3' | 'idle';
@@ -18,7 +19,8 @@ const CoverageVerificationResults: React.FC<CoverageVerificationResultsProps> = 
   isOpen,
   onClose,
   patientName = "Christopher James Davis",
-  patient
+  patient,
+  onTransactionCreated
 }) => {
   const { isApiEnabled } = useStediApi();
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -304,17 +306,49 @@ Plan Renewal:           January 1st`;
 
       console.log('[TransactionSave] Sending transaction data:', JSON.stringify(transactionData, null, 2));
 
-      const response = await fetch('/api/transactions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(transactionData)
+      // First, try to find an existing 'Waiting' API transaction for this patient
+      const transactionsResponse = await fetch('/api/transactions', {
+        credentials: 'include'
       });
+
+      let waitingTransaction = null;
+      if (transactionsResponse.ok) {
+        const data = await transactionsResponse.json();
+        const patientTransactions = data.transactions.filter((t: any) => t.patientId === patient.id);
+        waitingTransaction = patientTransactions.find((t: any) => t.type === 'API' && t.status === 'Waiting');
+      }
+
+      let response;
+      if (waitingTransaction) {
+        // Update existing 'Waiting' transaction
+        console.log('[TransactionSave] Found existing Waiting API transaction, updating it:', waitingTransaction.id);
+        response = await fetch(`/api/transactions/${waitingTransaction.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify(transactionData)
+        });
+      } else {
+        // Create new transaction (fallback for patients without a Waiting transaction)
+        console.log('[TransactionSave] No Waiting API transaction found, creating new one');
+        response = await fetch('/api/transactions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify(transactionData)
+        });
+      }
 
       if (response.ok) {
         console.log('Transaction history saved successfully');
+        // Trigger refresh of transaction history
+        if (onTransactionCreated) {
+          onTransactionCreated();
+        }
       } else {
         const error = await response.json();
         console.error('Error saving transaction:', error);

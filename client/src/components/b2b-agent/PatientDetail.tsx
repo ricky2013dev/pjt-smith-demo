@@ -57,6 +57,9 @@ const PatientDetail: React.FC<PatientDetailProps> = ({
   // Coverage Verification Results Modal state
   const [isCoverageResultsOpen, setIsCoverageResultsOpen] = useState(false);
 
+  // Transaction refresh trigger
+  const [transactionRefreshTrigger, setTransactionRefreshTrigger] = useState(0);
+
   // Patient Basic Info editing states
   // Default to view mode for all users to protect sensitive data
   const [isEditing, setIsEditing] = useState(false);
@@ -1378,7 +1381,7 @@ const PatientDetail: React.FC<PatientDetailProps> = ({
         {/* Tab Content - AI Call History */}
         {/* Always render SmartAITransactionHistory so window.openFaxModal is always available */}
         <div className={activeTab === TAB_TYPES.AI_CALL_HISTORY ? '' : 'hidden'}>
-          <SmartAITransactionHistory patientId={patient.id} />
+          <SmartAITransactionHistory patientId={patient.id} refreshTrigger={transactionRefreshTrigger} />
         </div>
       </div>
 
@@ -1423,6 +1426,7 @@ const PatientDetail: React.FC<PatientDetailProps> = ({
         onClose={() => setIsCoverageResultsOpen(false)}
         patientName={getFullName()}
         patient={patient}
+        onTransactionCreated={() => setTransactionRefreshTrigger(prev => prev + 1)}
       />
 
       {/* Document Upload Modal */}

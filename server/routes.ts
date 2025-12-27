@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
 import { transactions, transactionDataVerified, callCommunications } from "@shared/schema";
+import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import axios from "axios";
 import { readFileSync } from "fs";
@@ -870,6 +871,27 @@ export async function registerRoutes(
       if (verificationStatus) {
         await storage.createVerificationStatus({ ...verificationStatus, patientId: newPatient.id });
       }
+
+      // Create a 'Waiting' API transaction for the new patient
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const apiRequestId = `REQ-${timestamp}-API`;
+      const patientFullName = `${patient.name?.given?.join(' ') || ''} ${patient.name?.family || ''}`.trim();
+
+      const waitingApiTransaction = {
+        requestId: apiRequestId,
+        patientId: newPatient.id,
+        patientName: patientFullName || 'Unknown Patient',
+        type: 'API',
+        method: 'POST /api/benefits/query',
+        startTime: '', // Empty - waiting to start
+        status: 'Waiting',
+        insuranceProvider: insurances && insurances.length > 0 ? insurances[0].provider : '-',
+        fetchStatus: 'pending',
+        saveStatus: 'pending'
+      };
+
+      await db.insert(transactions).values(waitingApiTransaction);
+      console.log('[API] Created Waiting API transaction for new patient:', apiRequestId);
 
       res.json({ success: true, patient: newPatient });
     } catch (error) {
@@ -1854,6 +1876,105 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching transaction:", error);
       res.status(500).json({ error: "Failed to fetch transaction" });
+    }
+  });
+
+  app.put("/api/transactions/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const userId = (req.session as any)?.userId;
+      const transactionData = req.body;
+
+      console.log('[API] PUT /api/transactions/:id - User:', userId, 'Transaction ID:', id);
+      console.log('[API] Transaction update data:', JSON.stringify(transactionData, null, 2));
+
+      // Verify transaction exists
+      const existingTransaction = await storage.getTransactionById(id);
+      if (!existingTransaction) {
+        return res.status(404).json({ error: "Transaction not found" });
+      }
+
+      // Verify patient belongs to current user if patientId is in the transaction
+      if (existingTransaction.patientId) {
+        const patient = await storage.getPatientById(existingTransaction.patientId);
+        if (!patient || patient.userId !== userId) {
+          console.log('[API] Access denied - patient does not belong to user');
+          return res.status(403).json({ error: "Access denied" });
+        }
+      }
+
+      // Remove dataVerified and callCommunications from main transaction data
+      const { dataVerified, callCommunications: comms, ...txnData } = transactionData;
+
+      // Update transaction
+      const [updatedTransaction] = await db.update(transactions)
+        .set(txnData)
+        .where(eq(transactions.id, id))
+        .returning();
+
+      console.log('[API] Transaction updated with ID:', id);
+
+      // Delete existing verified data items and insert new ones if provided
+      if (dataVerified && Array.isArray(dataVerified)) {
+        await db.delete(transactionDataVerified).where(eq(transactionDataVerified.transactionId, id));
+        console.log('[API] Inserting', dataVerified.length, 'verified data items');
+        for (const item of dataVerified) {
+          await db.insert(transactionDataVerified).values({
+            transactionId: id,
+            item
+          });
+        }
+      }
+
+      // Delete existing call communications and insert new ones if provided
+      if (comms && Array.isArray(comms)) {
+        await db.delete(callCommunications).where(eq(callCommunications.transactionId, id));
+        console.log('[API] Inserting', comms.length, 'call communications');
+        for (const comm of comms) {
+          await db.insert(callCommunications).values({
+            transactionId: id,
+            ...comm
+          });
+        }
+      }
+
+      // Auto-create CALL transaction when API transaction is updated to SUCCESS
+      if (existingTransaction.type === 'API' &&
+          txnData.status === 'SUCCESS' &&
+          existingTransaction.status !== 'SUCCESS') {
+        console.log('[API] API transaction updated to SUCCESS, creating follow-up CALL transaction');
+
+        // Generate new request ID for CALL transaction
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        const callRequestId = `REQ-${timestamp}-CALL`;
+
+        const callTransactionData = {
+          requestId: callRequestId,
+          patientId: existingTransaction.patientId,
+          patientName: existingTransaction.patientName,
+          type: 'CALL',
+          method: 'Insurance Verification Call',
+          startTime: '', // Empty - waiting to start
+          status: 'Waiting',
+          insuranceProvider: existingTransaction.insuranceProvider || '-',
+          fetchStatus: 'pending',
+          saveStatus: 'pending'
+        };
+
+        await db.insert(transactions).values(callTransactionData);
+        console.log('[API] Follow-up CALL transaction created with requestId:', callRequestId);
+      }
+
+      console.log('[API] Transaction updated successfully');
+      res.json({ success: true, transaction: updatedTransaction });
+    } catch (error: any) {
+      console.error("[API] Error updating transaction:", error);
+      console.error("[API] Error details:", error.message);
+      console.error("[API] Error stack:", error.stack);
+      res.status(500).json({
+        error: "Failed to update transaction",
+        details: error.message
+      });
     }
   });
 
