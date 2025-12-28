@@ -900,6 +900,270 @@ export async function registerRoutes(
     }
   });
 
+  // Fetch PMS - Create sample patients with upcoming appointments
+  app.post("/api/patients/fetch-pms", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any)?.userId;
+
+      // Sample patient data
+      const samplePatients = [
+        {
+          patient: {
+            name: { given: ['Emily'], family: 'Rodriguez' },
+            gender: 'female',
+            birthDate: '1990-03-15',
+            ssn: '123-45-6789',
+            active: true
+          },
+          telecoms: [
+            { system: 'phone', value: '(555) 234-5678' },
+            { system: 'email', value: 'emily.rodriguez@email.com' }
+          ],
+          addresses: [
+            {
+              line: ['456 Oak Avenue', 'Apt 12'],
+              city: 'San Francisco',
+              state: 'CA',
+              postalCode: '94102'
+            }
+          ],
+          insurances: [
+            {
+              type: 'Dental',
+              provider: 'Delta Dental',
+              policyNumber: 'DD123456789',
+              groupNumber: 'GRP001',
+              subscriberName: 'Emily Rodriguez',
+              subscriberId: 'ER123456',
+              relationship: 'Self',
+              effectiveDate: '2024-01-01',
+              expirationDate: '2024-12-31',
+              coverage: {
+                deductible: '50.00',
+                deductibleMet: '0.00',
+                maxBenefit: '2000.00',
+                preventiveCoverage: '100',
+                basicCoverage: '80',
+                majorCoverage: '50'
+              }
+            }
+          ],
+          appointmentTypes: ['Routine Cleaning', 'Dental Exam']
+        },
+        {
+          patient: {
+            name: { given: ['Michael'], family: 'Chen' },
+            gender: 'male',
+            birthDate: '1985-07-22',
+            ssn: '987-65-4321',
+            active: true
+          },
+          telecoms: [
+            { system: 'phone', value: '(555) 876-5432' },
+            { system: 'email', value: 'michael.chen@email.com' }
+          ],
+          addresses: [
+            {
+              line: ['789 Pine Street'],
+              city: 'Los Angeles',
+              state: 'CA',
+              postalCode: '90001'
+            }
+          ],
+          insurances: [
+            {
+              type: 'Dental',
+              provider: 'MetLife',
+              policyNumber: 'ML987654321',
+              groupNumber: 'GRP002',
+              subscriberName: 'Michael Chen',
+              subscriberId: 'MC987654',
+              relationship: 'Self',
+              effectiveDate: '2024-01-01',
+              expirationDate: '2024-12-31',
+              coverage: {
+                deductible: '100.00',
+                deductibleMet: '50.00',
+                maxBenefit: '1500.00',
+                preventiveCoverage: '100',
+                basicCoverage: '70',
+                majorCoverage: '50'
+              }
+            }
+          ],
+          appointmentTypes: ['Filling', 'X-Ray']
+        },
+        {
+          patient: {
+            name: { given: ['Sarah'], family: 'Thompson' },
+            gender: 'female',
+            birthDate: '1995-11-08',
+            ssn: '456-78-9012',
+            active: true
+          },
+          telecoms: [
+            { system: 'phone', value: '(555) 345-6789' },
+            { system: 'email', value: 'sarah.thompson@email.com' }
+          ],
+          addresses: [
+            {
+              line: ['321 Maple Drive'],
+              city: 'San Diego',
+              state: 'CA',
+              postalCode: '92101'
+            }
+          ],
+          insurances: [
+            {
+              type: 'Dental',
+              provider: 'Cigna',
+              policyNumber: 'CG456789012',
+              groupNumber: 'GRP003',
+              subscriberName: 'Sarah Thompson',
+              subscriberId: 'ST456789',
+              relationship: 'Self',
+              effectiveDate: '2024-01-01',
+              expirationDate: '2024-12-31',
+              coverage: {
+                deductible: '75.00',
+                deductibleMet: '25.00',
+                maxBenefit: '1800.00',
+                preventiveCoverage: '100',
+                basicCoverage: '80',
+                majorCoverage: '60'
+              }
+            }
+          ],
+          appointmentTypes: ['Consultation', 'Root Canal']
+        }
+      ];
+
+      const createdPatients = [];
+
+      // Create each sample patient
+      for (const sampleData of samplePatients) {
+        const patientId = await generateNextPatientId(userId);
+
+        // Encrypt sensitive data
+        const encryptedBirthDate = encrypt(sampleData.patient.birthDate);
+        const encryptedSSN = encrypt(sampleData.patient.ssn);
+
+        // Create patient
+        const newPatient = await storage.createPatient({
+          id: patientId,
+          userId,
+          active: sampleData.patient.active,
+          givenName: sampleData.patient.name.given.join(' '),
+          familyName: sampleData.patient.name.family,
+          gender: sampleData.patient.gender,
+          birthDate: encryptedBirthDate,
+          ssn: encryptedSSN
+        });
+
+        // Create telecoms
+        await Promise.all(sampleData.telecoms.map(t =>
+          storage.createPatientTelecom({ ...t, patientId: newPatient.id })
+        ));
+
+        // Create addresses
+        await Promise.all(sampleData.addresses.map(a =>
+          storage.createPatientAddress({
+            patientId: newPatient.id,
+            line1: a.line[0] || null,
+            line2: a.line[1] || null,
+            city: a.city,
+            state: a.state,
+            postalCode: a.postalCode
+          })
+        ));
+
+        // Create insurances
+        await Promise.all(sampleData.insurances.map(i =>
+          storage.createInsurance({
+            patientId: newPatient.id,
+            type: i.type,
+            provider: i.provider,
+            policyNumber: encrypt(i.policyNumber),
+            groupNumber: encrypt(i.groupNumber),
+            subscriberName: i.subscriberName,
+            subscriberId: i.subscriberId,
+            relationship: i.relationship,
+            effectiveDate: i.effectiveDate,
+            expirationDate: i.expirationDate,
+            deductible: i.coverage.deductible,
+            deductibleMet: i.coverage.deductibleMet,
+            maxBenefit: i.coverage.maxBenefit,
+            preventiveCoverage: i.coverage.preventiveCoverage,
+            basicCoverage: i.coverage.basicCoverage,
+            majorCoverage: i.coverage.majorCoverage
+          })
+        ));
+
+        // Create 1 upcoming appointment on Tuesday after 1 week
+        const today = new Date();
+        const oneWeekLater = new Date(today);
+        oneWeekLater.setDate(today.getDate() + 7);
+
+        // Find the next Tuesday after 1 week
+        // 0 = Sunday, 1 = Monday, 2 = Tuesday, etc.
+        const dayOfWeek = oneWeekLater.getDay();
+        const daysUntilTuesday = dayOfWeek <= 2 ? (2 - dayOfWeek) : (9 - dayOfWeek);
+        const nextTuesday = new Date(oneWeekLater);
+        nextTuesday.setDate(oneWeekLater.getDate() + daysUntilTuesday);
+
+        const appointment = {
+          patientId: newPatient.id,
+          date: nextTuesday.toISOString().split('T')[0],
+          time: '09:00',
+          type: sampleData.appointmentTypes[0],
+          status: 'scheduled',
+          provider: 'Dr. Smith'
+        };
+
+        await storage.createAppointment(appointment);
+
+        // Create verification status
+        await storage.createVerificationStatus({
+          patientId: newPatient.id,
+          fetchPMS: 'pending',
+          documentAnalysis: 'pending',
+          apiVerification: 'pending',
+          callCenter: 'pending',
+          saveToPMS: 'pending'
+        });
+
+        // Create a 'Waiting' API transaction
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        const apiRequestId = `REQ-${timestamp}-${patientId}-API`;
+        const patientFullName = `${sampleData.patient.name.given.join(' ')} ${sampleData.patient.name.family}`;
+
+        await db.insert(transactions).values({
+          requestId: apiRequestId,
+          patientId: newPatient.id,
+          patientName: patientFullName,
+          type: 'API',
+          method: 'POST /api/benefits/query',
+          startTime: '',
+          status: 'Waiting',
+          insuranceProvider: sampleData.insurances[0].provider,
+          fetchStatus: 'pending',
+          saveStatus: 'pending'
+        });
+
+        createdPatients.push(newPatient);
+      }
+
+      res.json({
+        success: true,
+        patientsCreated: createdPatients.length,
+        patients: createdPatients
+      });
+    } catch (error) {
+      console.error("Error fetching PMS data:", error);
+      res.status(500).json({ error: "Failed to fetch PMS data" });
+    }
+  });
+
   // Update patient
   app.put("/api/patients/:id", requireAuth, async (req, res) => {
     try {
