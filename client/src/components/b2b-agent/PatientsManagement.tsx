@@ -32,6 +32,7 @@ const PatientsManagement: React.FC = () => {
     appointmentType: '',
     appointmentProvider: '',
   });
+  const [isFetchingPMS, setIsFetchingPMS] = useState(false);
 
   useEffect(() => {
     fetchCurrentUser();
@@ -225,6 +226,31 @@ const PatientsManagement: React.FC = () => {
     navigate(`/b2b-agent/patient-detail?patientId=${patientId}`);
   };
 
+  const handleFetchPMS = async () => {
+    try {
+      setIsFetchingPMS(true);
+      const response = await fetch('/api/patients/fetch-pms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch PMS data');
+      }
+
+      const data = await response.json();
+
+      // Refresh patient list
+      await fetchPatientsFromDatabase();
+
+      alert(`Successfully created ${data.patientsCreated} patients with upcoming appointments!`);
+    } catch (error: any) {
+      alert(error.message || 'Failed to fetch PMS data');
+    } finally {
+      setIsFetchingPMS(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
@@ -249,15 +275,34 @@ const PatientsManagement: React.FC = () => {
 
       {/* Main Content */}
       <main className="flex flex-1 overflow-hidden relative">
-        {/* Create Patient Button - Only show if using database */}
+        {/* Buttons - Only show if using database */}
         {useDatabase && (
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="absolute top-4 right-4 z-10 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium flex items-center gap-2 shadow-lg transition-colors"
-          >
-            <span className="material-symbols-outlined">add</span>
-            Create New Patient
-          </button>
+          <div className="absolute top-4 right-4 z-10 flex gap-3">
+            <button
+              onClick={handleFetchPMS}
+              disabled={isFetchingPMS}
+              className="px-3 py-1.5 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white text-sm rounded-lg font-medium flex items-center gap-1.5 shadow-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isFetchingPMS ? (
+                <>
+                  <span className="material-symbols-outlined animate-spin text-base">progress_activity</span>
+                  <span>Fetching...</span>
+                </>
+              ) : (
+                <>
+                  <span className="material-symbols-outlined text-base">cloud_download</span>
+                  <span>Fetch PMS</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="px-4 py-2 bg-slate-900 text-sm  dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white rounded-lg font-medium flex items-center gap-2 shadow-lg transition-colors"
+            >
+              <span className="material-symbols-outlined">add</span>
+              <span>New </span>
+            </button>
+          </div>
         )}
 
         <PatientGuide
