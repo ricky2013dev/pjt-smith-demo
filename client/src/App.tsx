@@ -9,6 +9,7 @@ import InsuranceCallDetail from '@/components/insurance/InsuranceCallDetail';
 import StediEligibilityChecker from '@/components/insurance/StediEligibilityChecker';
 import UserManagement from '@/components/admin/UserManagement';
 import { StediApiProvider } from '@/context/StediApiContext';
+import { Toaster } from '@/components/ui/toaster';
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
         </Route>
       </Switch>
     </Router>
+    <Toaster />
     </StediApiProvider>
   );
 }

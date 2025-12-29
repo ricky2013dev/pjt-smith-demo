@@ -115,20 +115,7 @@ const Header: React.FC<HeaderProps> = ({ onLogoClick, currentUser, onLogout, onL
         {/* HIPAA Compliance, User Info and Logout */}
         {onLogout ? (
           <div className="flex items-center gap-4">
-            {/* API Toggle Button */}
-            <button
-              onClick={toggleApi}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap ${isApiEnabled
-                ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/60'
-                : 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50'
-                }`}
-              title={isApiEnabled ? 'API Enabled - Using Stedi API' : 'API Disabled - Using mock data'}
-            >
-              <span className="material-symbols-outlined text-xs">
-                {isApiEnabled ? 'cloud_done' : 'cloud_off'}
-              </span>
-              Stedi Test {isApiEnabled ? 'On' : 'Off'}
-            </button>
+
 
             {/* HIPAA Compliance Notice - Hover to expand */}
             <div className="group relative">
@@ -163,6 +150,23 @@ const Header: React.FC<HeaderProps> = ({ onLogoClick, currentUser, onLogout, onL
             </div>
 
 
+            {/* API Toggle Button */}
+            {isRealDataOn && (
+              <button
+                onClick={toggleApi}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap ${isApiEnabled
+                  ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/60'
+                  : 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50'
+                  }`}
+                title={isApiEnabled ? 'API Enabled - Using Stedi API' : 'API Disabled - Using mock data'}
+              >
+                <span className="material-symbols-outlined text-xs">
+                  {isApiEnabled ? 'cloud_done' : 'cloud_off'}
+                </span>
+                Stedi API {isApiEnabled ? 'On' : 'Off'}
+              </button>
+            )}
+            
             {/* User Info */}
             {currentUser && (
               <div className="text-right">
@@ -201,7 +205,7 @@ const Header: React.FC<HeaderProps> = ({ onLogoClick, currentUser, onLogout, onL
               <span>Dental Office</span>
               <span className="material-symbols-outlined text-sm group-hover:translate-x-0.5 transition-transform">arrow_forward</span>
             </button>
-            {onInsuranceLoginClick && (
+            {onInsuranceLoginClick && isRealDataOn && (
               <button
                 onClick={onInsuranceLoginClick}
                 className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 text-xs font-medium rounded-lg shadow-md hover:shadow-lg transition-all duration-300 flex items-center gap-2 group"

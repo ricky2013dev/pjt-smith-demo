@@ -4,11 +4,13 @@ import PatientGuide from './PatientGuide';
 import Header from '@/components/Header';
 import patientsDataMockup from '@mockupdata/patients.json';
 import type { Patient as PatientType } from '@/types/patient';
+import { useToast } from '@/hooks/use-toast';
 
 const mockupPatients = Array.isArray(patientsDataMockup) ? patientsDataMockup : (patientsDataMockup as any).default || [];
 
 const PatientsManagement: React.FC = () => {
   const [, navigate] = useLocation();
+  const { toast } = useToast();
   const [patients, setPatients] = useState<PatientType[]>(mockupPatients);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -155,8 +157,18 @@ const PatientsManagement: React.FC = () => {
 
       // Refresh patient list
       await fetchPatientsFromDatabase();
+
+      toast({
+        variant: "success",
+        title: "Patient created successfully",
+        description: "The new patient has been added to the system.",
+      });
     } catch (error: any) {
-      alert(error.message);
+      toast({
+        variant: "error",
+        title: "Error creating patient",
+        description: error.message,
+      });
     }
   };
 
@@ -243,9 +255,19 @@ const PatientsManagement: React.FC = () => {
       // Refresh patient list
       await fetchPatientsFromDatabase();
 
-      alert(`Successfully created ${data.patientsCreated} patients with upcoming appointments!`);
+      toast({
+        variant: "success",
+        title: "PMS data fetched successfully",
+        description: data.patientsCreated
+          ? `Successfully created ${data.patientsCreated} patients with upcoming appointments!`
+          : "Patient data has been synchronized.",
+      });
     } catch (error: any) {
-      alert(error.message || 'Failed to fetch PMS data');
+      toast({
+        variant: "error",
+        title: "Failed to fetch PMS data",
+        description: error.message || 'An error occurred while fetching PMS data',
+      });
     } finally {
       setIsFetchingPMS(false);
     }

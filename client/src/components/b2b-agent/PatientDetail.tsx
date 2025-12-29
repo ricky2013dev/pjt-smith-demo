@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Patient,
   Appointment,
@@ -21,6 +21,7 @@ import SensitiveDataField from "@/components/SensitiveDataField";
 import InsuranceSensitiveDataField from "@/components/InsuranceSensitiveDataField";
 import { PRIMARY_BUTTON } from "@/styles/buttonStyles";
 import { VERIFICATION_STATUS_LABELS } from '@/constants/verificationStatus';
+import { deriveVerificationStatusFromTransactions, type Transaction, type VerificationStatus } from '@/utils/transactionStatus';
 
 interface PatientDetailProps {
   patient: Patient;
@@ -93,13 +94,42 @@ const PatientDetail: React.FC<PatientDetailProps> = ({
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Transaction-based status for Data Mode
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [loadingTransactions, setLoadingTransactions] = useState(false);
+
+  // Compute effective verification status based on Data Mode
+  // In Data Mode: derive from transactions
+  // In Mock Mode: use patient's verification status
+  const effectiveVerificationStatus = useMemo(() => {
+    const isDataMode = currentUser?.dataSource;
+
+    if (isDataMode && transactions.length > 0) {
+      // Data Mode ON: derive status from transactions
+      const derivedStatus = deriveVerificationStatusFromTransactions(transactions);
+      console.log('[PatientDetail] Using transaction-derived status (Data Mode ON):', derivedStatus);
+      return derivedStatus;
+    } else {
+      // Data Mode OFF or no transactions: use patient's verification status
+      console.log('[PatientDetail] Using patient verification status (Data Mode OFF or no transactions):', patient.verificationStatus);
+      return patient.verificationStatus || {
+        fetchPMS: 'pending',
+        apiVerification: 'pending',
+        documentAnalysis: 'pending',
+        callCenter: 'pending',
+        saveToPMS: 'pending',
+      };
+    }
+  }, [currentUser?.dataSource, transactions, patient.verificationStatus]);
+
   const getFullName = () => {
     const given = patient.name.given.join(" ");
     return `${given} ${patient.name.family}`.trim();
   };
 
   const getVerificationStep = () => {
-    const status = patient.verificationStatus;
+    const status = effectiveVerificationStatus;
     if (!status) return 1;
 
     if (status.saveToPMS === 'completed') return 5;
@@ -116,7 +146,7 @@ const PatientDetail: React.FC<PatientDetailProps> = ({
   };
 
   const getStepConfig = (stepKey: 'fetchPMS' | 'documentAnalysis' | 'apiVerification' | 'callCenter' | 'saveToPMS') => {
-    const status = patient.verificationStatus?.[stepKey] || 'pending';
+    const status = effectiveVerificationStatus?.[stepKey] || 'pending';
     const configs = {
       fetchPMS: {
         icon: status === 'completed' ? 'check' : status === 'in_progress' ? 'sync' : 'download',
@@ -164,19 +194,19 @@ const PatientDetail: React.FC<PatientDetailProps> = ({
 
   // Check if each step is completed
   const isFetchPMSCompleted = () => {
-    return patient.verificationStatus?.fetchPMS === 'completed';
+    return effectiveVerificationStatus?.fetchPMS === 'completed';
   };
 
   const isDocumentAnalysisCompleted = () => {
-    return patient.verificationStatus?.documentAnalysis === 'completed';
+    return effectiveVerificationStatus?.documentAnalysis === 'completed';
   };
 
   const isAPIVerificationCompleted = () => {
-    return patient.verificationStatus?.apiVerification === 'completed';
+    return effectiveVerificationStatus?.apiVerification === 'completed';
   };
 
   const isCallCenterCompleted = () => {
-    return patient.verificationStatus?.callCenter === 'completed';
+    return effectiveVerificationStatus?.callCenter === 'completed';
   };
 
   // Check if status is 100% (all 5 steps completed)
@@ -290,6 +320,61 @@ const PatientDetail: React.FC<PatientDetailProps> = ({
     }
     return age;
   };
+
+  // Fetch current user to determine Data Mode
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      try {
+        const response = await fetch('/api/auth/verify', {
+          credentials: 'include'
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setCurrentUser(data.user);
+        }
+      } catch (error) {
+        console.error('[PatientDetail] Error fetching current user:', error);
+      }
+    };
+    fetchCurrentUser();
+  }, []);
+
+  // Fetch transactions for this patient when in Data Mode
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      // Only fetch transactions if Data Mode is ON
+      if (!currentUser?.dataSource) {
+        setTransactions([]);
+        return;
+      }
+
+      try {
+        setLoadingTransactions(true);
+        const response = await fetch('/api/transactions', {
+          credentials: 'include'
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.transactions) {
+            // Filter transactions for this patient
+            const patientTransactions = data.transactions.filter(
+              (t: Transaction) => t.patientId === patient.id
+            );
+            setTransactions(patientTransactions);
+          }
+        }
+      } catch (error) {
+        console.error('[PatientDetail] Error fetching transactions:', error);
+      } finally {
+        setLoadingTransactions(false);
+      }
+    };
+
+    if (currentUser !== null) {
+      fetchTransactions();
+    }
+  }, [patient.id, currentUser, transactionRefreshTrigger]);
 
   // Initialize edited contact info and insurance from patient data
   React.useEffect(() => {
@@ -439,7 +524,7 @@ const PatientDetail: React.FC<PatientDetailProps> = ({
             >
               <span className={`material-symbols-outlined text-base ${isAPIVerificationCompleted()
                 ? 'text-green-500'
-                : patient.verificationStatus?.apiVerification === 'in_progress'
+                : effectiveVerificationStatus?.apiVerification === 'in_progress'
                   ? 'text-blue-500'
                   : ''
                 }`}>
@@ -474,7 +559,7 @@ const PatientDetail: React.FC<PatientDetailProps> = ({
             >
               <span className={`material-symbols-outlined text-base ${isCallCenterCompleted()
                 ? 'text-green-500'
-                : patient.verificationStatus?.callCenter === 'in_progress'
+                : effectiveVerificationStatus?.callCenter === 'in_progress'
                   ? 'text-blue-500'
                   : ''
                 }`}>
