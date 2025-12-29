@@ -118,18 +118,7 @@ function generateDynamicDates() {
     // Write updated data back to file
     fs.writeFileSync(PATIENTS_DATA_PATH, JSON.stringify(patientsData, null, 2));
 
-    console.log('✅ Dynamic appointment dates generated successfully!');
-    console.log(`📊 Statistics:`);
-    console.log(`   - Patients with appointments: ${totalPatientsWithAppointments}`);
-    console.log(`   - Total appointments updated: ${totalAppointmentsUpdated}`);
-    console.log(`   - File saved: ${PATIENTS_DATA_PATH}`);
-    console.log(`\n📅 Date ranges:`);
-    console.log(`   - Upcoming appointments: 3-7 days from today`);
-    console.log(`   - Past appointments: 30-120 days ago`);
-    console.log(`\n💡 Tip: Run this script before doing demos to get fresh dates!`);
-
   } catch (error) {
-    console.error('❌ Error generating dynamic dates:', error.message);
     process.exit(1);
   }
 }
