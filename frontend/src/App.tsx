@@ -8,6 +8,8 @@ import InsuranceCallDashboard from '@/components/insurance/InsuranceCallDashboar
 import InsuranceCallDetail from '@/components/insurance/InsuranceCallDetail';
 import StediEligibilityChecker from '@/components/insurance/StediEligibilityChecker';
 import UserManagement from '@/components/admin/UserManagement';
+import PatientManagement from '@/components/admin/PatientManagement';
+import InterfaceTableManagement from '@/components/admin/InterfaceTableManagement';
 import { StediApiProvider } from '@/context/StediApiContext';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -25,6 +27,8 @@ function App() {
         <Route path="/insurance/call/:id" component={() => <InsuranceCallDetail />} />
         <Route path="/insurance/stedi-eligibility" component={() => <StediEligibilityChecker />} />
         <Route path="/admin/users" component={() => <UserManagement />} />
+        <Route path="/admin/patients" component={() => <PatientManagement />} />
+        <Route path="/admin/interface-tables" component={() => <InterfaceTableManagement />} />
         <Route path="/dashboard" component={() => <DailyJobDashboard />} />
         <Route path="/patient-appointments" component={() => <PatientsManagement />} />
         <Route path="/smart-ai-transaction-history" component={() => <SmartAITransactionHistory />} />

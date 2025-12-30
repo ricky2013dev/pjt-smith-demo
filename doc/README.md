@@ -201,10 +201,14 @@ This system handles Protected Health Information (PHI) and must comply with HIPA
 
 See `doc/HIPAA_SENSITIVE_DATA_GUIDE.md` and `doc/SSN_FIELD_IMPLEMENTATION.md` for detailed security implementation.
 
-### Authentication
+### Authentication & Authorization
 - Passport.js local strategy
 - Password hashing with bcrypt
 - Session-based authentication stored in PostgreSQL
+- Role-based access control (RBAC)
+  - Admin middleware (`requireAdmin`) for admin-only endpoints
+  - User ownership validation for resource access
+  - Admins can access/modify resources across all users
 
 ## API Documentation
 
@@ -212,6 +216,57 @@ API documentation is available via Swagger UI when running the development serve
 - Navigate to `/api-docs` endpoint
 - Interactive API testing interface
 - Complete endpoint documentation
+
+### Key API Endpoints
+
+#### Admin Endpoints (Require Admin Role)
+- `GET /api/users` - List all users
+- `POST /api/users` - Create new user
+- `GET /api/admin/users/:userId/patients` - Get all patients for a specific user
+- `GET /api/admin/interface-tables` - View interface table data
+
+#### Patient Endpoints
+- `GET /api/patients` - List patients (user's own or all if admin)
+- `POST /api/patients` - Create new patient
+- `GET /api/patients/:id` - Get patient details
+- `DELETE /api/patients/:id` - Delete patient (owner or admin only)
+- `POST /api/patients/:id/decrypt` - Decrypt sensitive patient fields
+
+#### Authentication Endpoints
+- `POST /api/auth/login` - User login
+- `POST /api/auth/logout` - User logout
+- `GET /api/auth/verify` - Verify current session
+
+## User Roles & Permissions
+
+### Available Roles
+- **admin**: Full system access including user and patient management across all users
+- **user**: Standard access to own patients and verification workflows
+- **dental**: Dental practice-specific role with patient access
+
+### Admin Panel Features
+
+The admin panel provides system-wide management capabilities accessible only to users with admin role.
+
+#### User Management (`/admin/users`)
+- View all system users
+- Create new users with assigned roles
+- Manage user data sources
+- Monitor user activity
+
+#### Patient Management (`/admin/patients`)
+- **Unified Table View**: See all patients across all users in a single table
+- **User Filter**: Filter patients by specific user or view all
+- **User Column**: Shows which user each patient belongs to (username + email)
+- **Full Patient Details**: Patient ID, name, gender, contact info, insurance, status
+- **Admin Delete**: Admins can delete any patient (regular users can only delete their own)
+- **Cascade Delete**: Patient deletion removes all related data (appointments, treatments, transactions, etc.)
+
+#### Interface Table Management (`/admin/interface-tables`)
+- Manage call transaction interface tables
+- View and manage coverage code data
+- Monitor call message logs
+- Export/sync with external systems
 
 ## Workflow Overview
 
@@ -273,11 +328,11 @@ The application is fully typed with TypeScript. Database types are automatically
 
 ## Additional Documentation
 
+- `ADMIN_FEATURES.md` - Comprehensive admin panel feature documentation
 - `DOCKER_SETUP.md` - Docker setup guide for local development
-- `DYNAMIC_DATES_README.md` - Dynamic date generation for mockup data
-- `HIPAA_SENSITIVE_DATA_GUIDE.md` - HIPAA compliance guidelines
+- `HIPAA_SENSITIVE_DATA_GUIDE.md` - HIPAA compliance and access control guidelines
 - `MOCKUPDATA_README.md` - Sample data documentation
-- `SSN_FIELD_IMPLEMENTATION.md` - SSN field security implementation
+- `../CHANGELOG.md` - Version history and recent changes
 
 ## License
 MIT

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import Header from '@/components/Header';
+import AdminLayout from './AdminLayout';
 
 interface User {
   id: string;
@@ -185,35 +185,28 @@ const UserManagement: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      <Header
-        mode="admin"
-        currentUser={currentUser ? {
-          name: currentUser.username,
-          email: currentUser.email,
-          username: currentUser.username
-        } : null}
-        onLogout={handleLogout}
-        onLogoClick={() => window.location.href = '/'}
-      />
-
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900 dark:text-white">User Management</h1>
-            <p className="text-slate-500 dark:text-slate-400 mt-2">Manage users and their roles</p>
-          </div>
-          <button
-            onClick={() => {
-              setFormData({ email: '', username: '', password: '', role: 'dental', dataSource: '' });
-              setShowCreateModal(true);
-            }}
-            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors"
-          >
-            <span className="material-symbols-outlined">add</span>
-            Create User
-          </button>
-        </div>
+    <AdminLayout
+      title="User Management"
+      description="Manage users and their roles"
+      currentUser={currentUser ? {
+        name: currentUser.username,
+        email: currentUser.email,
+        username: currentUser.username
+      } : null}
+      onLogout={handleLogout}
+      headerActions={
+        <button
+          onClick={() => {
+            setFormData({ email: '', username: '', password: '', role: 'dental', dataSource: '' });
+            setShowCreateModal(true);
+          }}
+          className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors"
+        >
+          <span className="material-symbols-outlined">add</span>
+          Create User
+        </button>
+      }
+    >
 
         {error && (
           <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
@@ -283,7 +276,6 @@ const UserManagement: React.FC = () => {
             </table>
           </div>
         )}
-      </div>
 
       {/* Create User Modal */}
       {showCreateModal && (
@@ -469,7 +461,7 @@ const UserManagement: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </AdminLayout>
   );
 };
 

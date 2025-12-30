@@ -2,7 +2,17 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { transactions, transactionDataVerified, callCommunications } from "@shared/schema";
+import {
+  transactions,
+  transactionDataVerified,
+  callCommunications,
+  patients,
+  ifCallTransactionList,
+  ifCallCoverageCodeList,
+  ifCallMessageList,
+  coverageByCode,
+  insurances
+} from "@shared/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import axios from "axios";
@@ -484,6 +494,42 @@ export async function registerRoutes(
     }
   });
 
+  // Get all patients for a specific user (Admin only)
+  app.get("/api/admin/users/:userId/patients", requireAdmin, async (req, res) => {
+    try {
+      const { userId } = req.params;
+
+      // Verify user exists
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Get all patients for this user
+      const patients = await storage.getPatientsByUserId(userId);
+
+      // Get all related data for each patient
+      const patientsWithData = await Promise.all(patients.map(async (patient) => {
+        const [telecoms, addresses, insurances] = await Promise.all([
+          storage.getPatientTelecoms(patient.id),
+          storage.getPatientAddresses(patient.id),
+          storage.getPatientInsurances(patient.id),
+        ]);
+
+        return {
+          ...patient,
+          telecoms,
+          addresses,
+          insurances,
+        };
+      }));
+
+      res.json({ success: true, patients: patientsWithData });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch patients" });
+    }
+  });
+
   // Middleware to check authentication
   const requireAuth = (req: any, res: any, next: any) => {
     const userId = req.session?.userId;
@@ -512,14 +558,15 @@ export async function registerRoutes(
 
   // Helper function to generate next patient ID in format P0000001
   const generateNextPatientId = async (userId: string): Promise<string> => {
-    const existingPatients = await storage.getPatientsByUserId(userId);
+    // Query ALL patients globally (not just for current user) since patient IDs are globally unique
+    const allPatients = await db.select({ id: patients.id }).from(patients);
 
-    if (existingPatients.length === 0) {
+    if (allPatients.length === 0) {
       return 'P0000001';
     }
 
     // Extract all numeric IDs from existing patient IDs
-    const numericIds = existingPatients
+    const numericIds = allPatients
       .map(p => p.id)
       .filter(id => id.startsWith('P'))
       .map(id => parseInt(id.substring(1), 10))
@@ -612,7 +659,8 @@ export async function registerRoutes(
           groupNumber: ins.groupNumber ? '********' : null, // Masked (HIPAA)
           groupNumberEncrypted: !!ins.groupNumber,
           subscriberName: ins.subscriberName,
-          subscriberId: ins.subscriberId,
+          subscriberId: ins.subscriberId ? '**********' : null, // Masked (HIPAA)
+          subscriberIdEncrypted: !!ins.subscriberId,
           relationship: ins.relationship,
           effectiveDate: ins.effectiveDate,
           expirationDate: ins.expirationDate,
@@ -828,7 +876,7 @@ export async function registerRoutes(
 
       if (insurances && Array.isArray(insurances)) {
         // Transform insurances from client format (nested coverage) to DB format (flat fields)
-        // Encrypt HIPAA-sensitive fields (policyNumber, groupNumber)
+        // Encrypt HIPAA-sensitive fields (policyNumber, groupNumber, subscriberId)
         await Promise.all(insurances.map(i => storage.createInsurance({
           patientId: newPatient.id,
           type: i.type,
@@ -836,7 +884,7 @@ export async function registerRoutes(
           policyNumber: i.policyNumber ? encrypt(i.policyNumber) : null,
           groupNumber: i.groupNumber ? encrypt(i.groupNumber) : null,
           subscriberName: i.subscriberName,
-          subscriberId: i.subscriberId,
+          subscriberId: i.subscriberId ? encrypt(i.subscriberId) : null,
           relationship: i.relationship,
           effectiveDate: i.effectiveDate,
           expirationDate: i.expirationDate,
@@ -1073,7 +1121,7 @@ export async function registerRoutes(
             policyNumber: encrypt(i.policyNumber),
             groupNumber: encrypt(i.groupNumber),
             subscriberName: i.subscriberName,
-            subscriberId: i.subscriberId,
+            subscriberId: encrypt(i.subscriberId),
             relationship: i.relationship,
             effectiveDate: i.effectiveDate,
             expirationDate: i.expirationDate,
@@ -1145,8 +1193,13 @@ export async function registerRoutes(
         patientsCreated: createdPatients.length,
         patients: createdPatients
       });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch PMS data" });
+    } catch (error: any) {
+      console.error("Failed to fetch PMS data:", error);
+      res.status(500).json({
+        error: "Failed to fetch PMS data",
+        details: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
     }
   });
 
@@ -1222,7 +1275,9 @@ export async function registerRoutes(
                 ? existingInsurance.groupNumber // Keep existing encrypted value
                 : (insuranceData.groupNumber ? encrypt(insuranceData.groupNumber) : null),
               subscriberName: insuranceData.subscriberName,
-              subscriberId: insuranceData.subscriberId,
+              subscriberId: insuranceData.subscriberId === '**********'
+                ? existingInsurance.subscriberId // Keep existing encrypted value
+                : (insuranceData.subscriberId ? encrypt(insuranceData.subscriberId) : null),
               relationship: insuranceData.relationship,
               effectiveDate: insuranceData.effectiveDate,
               expirationDate: insuranceData.expirationDate,
@@ -1242,7 +1297,7 @@ export async function registerRoutes(
               policyNumber: insuranceData.policyNumber ? encrypt(insuranceData.policyNumber) : null,
               groupNumber: insuranceData.groupNumber ? encrypt(insuranceData.groupNumber) : null,
               subscriberName: insuranceData.subscriberName,
-              subscriberId: insuranceData.subscriberId,
+              subscriberId: insuranceData.subscriberId ? encrypt(insuranceData.subscriberId) : null,
               relationship: insuranceData.relationship,
               effectiveDate: insuranceData.effectiveDate,
               expirationDate: insuranceData.expirationDate,
@@ -1308,7 +1363,8 @@ export async function registerRoutes(
         groupNumber: ins.groupNumber ? '********' : null, // Masked (HIPAA)
         groupNumberEncrypted: !!ins.groupNumber,
         subscriberName: ins.subscriberName,
-        subscriberId: ins.subscriberId,
+        subscriberId: ins.subscriberId ? '**********' : null, // Masked (HIPAA)
+        subscriberIdEncrypted: !!ins.subscriberId,
         relationship: ins.relationship,
         effectiveDate: ins.effectiveDate,
         expirationDate: ins.expirationDate,
@@ -1446,7 +1502,7 @@ export async function registerRoutes(
       const { field } = req.body;
 
       // List of allowed sensitive fields
-      const allowedFields = ['birthDate', 'phone', 'email', 'ssn'];
+      const allowedFields = ['birthDate', 'phone', 'email', 'ssn', 'address'];
 
       if (!field || !allowedFields.includes(field)) {
         return res.status(400).json({ error: "Invalid field specified" });
@@ -1494,6 +1550,16 @@ export async function registerRoutes(
             }
             break;
 
+          case 'address':
+            // Fetch patient's address (HIPAA-sensitive)
+            const addresses = await storage.getPatientAddresses(patient.id);
+            if (addresses && addresses.length > 0) {
+              const addr = addresses[0];
+              const line = addr.line1 ? (addr.line2 ? `${addr.line1}, ${addr.line2}` : addr.line1) : '';
+              decryptedValue = line ? `${line}, ${addr.city}, ${addr.state} ${addr.postalCode}` : `${addr.city}, ${addr.state} ${addr.postalCode}`;
+            }
+            break;
+
           default:
             return res.status(400).json({ error: "Field not supported" });
         }
@@ -1518,7 +1584,7 @@ export async function registerRoutes(
       const { field } = req.body;
 
       // List of allowed sensitive insurance fields
-      const allowedFields = ['policyNumber', 'groupNumber'];
+      const allowedFields = ['policyNumber', 'groupNumber', 'subscriberId'];
 
       if (!field || !allowedFields.includes(field)) {
         return res.status(400).json({ error: "Invalid field specified" });
@@ -1558,6 +1624,12 @@ export async function registerRoutes(
           case 'groupNumber':
             if (insurance.groupNumber) {
               decryptedValue = decrypt(insurance.groupNumber);
+            }
+            break;
+
+          case 'subscriberId':
+            if (insurance.subscriberId) {
+              decryptedValue = decrypt(insurance.subscriberId);
             }
             break;
 
@@ -1694,9 +1766,9 @@ export async function registerRoutes(
           // Update existing primary insurance
           await storage.updateInsurance(primaryInsurance.id, {
             provider: extractedData.provider,
-            policyNumber: extractedData.policyNumber,
-            groupNumber: extractedData.groupNumber,
-            subscriberId: extractedData.subscriberId,
+            policyNumber: extractedData.policyNumber ? encrypt(extractedData.policyNumber) : null,
+            groupNumber: extractedData.groupNumber ? encrypt(extractedData.groupNumber) : null,
+            subscriberId: extractedData.subscriberId ? encrypt(extractedData.subscriberId) : null,
             subscriberName: `${extractedData.firstName} ${extractedData.lastName}`
           });
         } else {
@@ -1705,9 +1777,9 @@ export async function registerRoutes(
             patientId: id,
             type: 'Primary',
             provider: extractedData.provider,
-            policyNumber: extractedData.policyNumber,
-            groupNumber: extractedData.groupNumber,
-            subscriberId: extractedData.subscriberId,
+            policyNumber: extractedData.policyNumber ? encrypt(extractedData.policyNumber) : null,
+            groupNumber: extractedData.groupNumber ? encrypt(extractedData.groupNumber) : null,
+            subscriberId: extractedData.subscriberId ? encrypt(extractedData.subscriberId) : null,
             subscriberName: `${extractedData.firstName} ${extractedData.lastName}`,
             relationship: 'Self',
             effectiveDate: null,
@@ -1732,13 +1804,16 @@ export async function registerRoutes(
     try {
       const { id } = req.params;
       const userId = (req.session as any)?.userId;
+      const userRole = (req.session as any)?.userRole;
 
-      // Verify patient exists and belongs to current user
+      // Verify patient exists
       const patient = await storage.getPatientById(id);
       if (!patient) {
         return res.status(404).json({ error: "Patient not found" });
       }
-      if (patient.userId !== userId) {
+
+      // Check if user has permission (owner or admin)
+      if (patient.userId !== userId && userRole !== 'admin') {
         return res.status(403).json({ error: "Access denied" });
       }
 
@@ -2177,7 +2252,71 @@ export async function registerRoutes(
           saveStatus: 'pending'
         };
 
-        await db.insert(transactions).values(callTransactionData);
+        // Insert CALL transaction and get the ID
+        const [newCallTransaction] = await db.insert(transactions).values(callTransactionData).returning();
+
+        // Populate interface tables when CALL transaction with 'Waiting' status is created
+        if (newCallTransaction && existingTransaction.patientId) {
+          // Get patient's primary insurance
+          const patientInsurances = await db.select()
+            .from(insurances)
+            .where(eq(insurances.patientId, existingTransaction.patientId));
+
+          const primaryInsurance = patientInsurances.find(i => i.type === 'Primary') || patientInsurances[0];
+
+          // 1. Insert into if_call_transaction_list with insurance information
+          const [ifCallTxn] = await db.insert(ifCallTransactionList).values({
+            transactionId: newCallTransaction.id,
+            requestId: newCallTransaction.requestId,
+            patientId: newCallTransaction.patientId,
+            patientName: newCallTransaction.patientName,
+            insuranceProvider: newCallTransaction.insuranceProvider,
+            policyNumber: primaryInsurance?.policyNumber || null, // Already encrypted
+            groupNumber: primaryInsurance?.groupNumber || null, // Already encrypted
+            subscriberId: primaryInsurance?.subscriberId || null, // Already encrypted
+            phoneNumber: newCallTransaction.phoneNumber || null,
+            startTime: newCallTransaction.startTime,
+            endTime: newCallTransaction.endTime || null,
+            duration: newCallTransaction.duration || null,
+            status: newCallTransaction.status,
+            insuranceRep: newCallTransaction.insuranceRep || null,
+            transcript: newCallTransaction.transcript || null
+          }).returning();
+
+          // 2. Copy coverage_by_code records to if_call_coverage_code_list
+          const coverageCodes = await db.select()
+            .from(coverageByCode)
+            .where(eq(coverageByCode.patientId, existingTransaction.patientId));
+
+          for (const code of coverageCodes) {
+            await db.insert(ifCallCoverageCodeList).values({
+              ifCallTransactionId: ifCallTxn.id,
+              saiCode: code.saiCode,
+              refInsCode: code.refInsCode,
+              category: code.category,
+              fieldName: code.fieldName,
+              preStepValue: code.preStepValue,
+              verified: code.verifiedBy === 'API' ? true : code.verified,
+              verifiedBy: code.verifiedBy,
+              coverageData: code.coverageData
+            });
+          }
+
+          // 3. Copy callCommunications from the API transaction to if_call_message_list
+          const apiCommunications = await db.select()
+            .from(callCommunications)
+            .where(eq(callCommunications.transactionId, id));
+
+          for (const comm of apiCommunications) {
+            await db.insert(ifCallMessageList).values({
+              ifCallTransactionId: ifCallTxn.id,
+              timestamp: comm.timestamp,
+              speaker: comm.speaker,
+              message: comm.message,
+              type: comm.type
+            });
+          }
+        }
       }
 
       res.json({ success: true, transaction: updatedTransaction });
@@ -2671,6 +2810,84 @@ export async function registerRoutes(
         success: false,
         error: error.message
       });
+    }
+  });
+
+  // Admin Interface Table Management Endpoints
+  // Get all interface transactions
+  app.get("/api/admin/interface/transactions", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const transactions = await db.select().from(ifCallTransactionList).orderBy(ifCallTransactionList.createdAt);
+      res.json(transactions);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get interface coverage codes (optionally filtered by transaction ID)
+  app.get("/api/admin/interface/coverage-codes", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { transactionId } = req.query;
+      let query = db.select().from(ifCallCoverageCodeList);
+
+      if (transactionId && typeof transactionId === 'string') {
+        query = query.where(eq(ifCallCoverageCodeList.ifCallTransactionId, transactionId));
+      }
+
+      const coverageCodes = await query.orderBy(ifCallCoverageCodeList.createdAt);
+      res.json(coverageCodes);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get interface messages (optionally filtered by transaction ID)
+  app.get("/api/admin/interface/messages", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { transactionId } = req.query;
+      let query = db.select().from(ifCallMessageList);
+
+      if (transactionId && typeof transactionId === 'string') {
+        query = query.where(eq(ifCallMessageList.ifCallTransactionId, transactionId));
+      }
+
+      const messages = await query.orderBy(ifCallMessageList.createdAt);
+      res.json(messages);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete interface transaction
+  app.delete("/api/admin/interface/transactions/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await db.delete(ifCallTransactionList).where(eq(ifCallTransactionList.id, id));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete interface coverage code
+  app.delete("/api/admin/interface/coverage/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await db.delete(ifCallCoverageCodeList).where(eq(ifCallCoverageCodeList.id, id));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete interface message
+  app.delete("/api/admin/interface/messages/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await db.delete(ifCallMessageList).where(eq(ifCallMessageList.id, id));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
     }
   });
 

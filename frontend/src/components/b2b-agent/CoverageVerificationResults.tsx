@@ -1,132 +1,95 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import VerificationDataPanel, { VerificationDataRow } from "./VerificationDataPanel";
 import stediService, { Subscriber, Provider } from "@/services/stediService";
 import { Patient } from "@/types/patient";
 import { useStediApi } from "@/context/StediApiContext";
 
-interface CoverageVerificationResultsProps {
-  isOpen: boolean;
-  onClose: () => void;
-  patientName?: string;
-  patient?: Patient;
-  onTransactionCreated?: () => void;
-}
+// Sample API verification results data - moved outside component for performance
+const API_VERIFICATION_DATA: VerificationDataRow[] = [
+  // Verified fields - Plan Information
+  { saiCode: "VF000001", refInsCode: "D001", category: "Plan Information", fieldName: "Plan Name", preStepValue: "Blue Cross Dental Plus", missing: "N", aiCallValue: "Blue Cross Dental Plus", verifiedBy: "API" },
+  { saiCode: "VF000002", refInsCode: "D002", category: "Plan Information", fieldName: "Group Number", preStepValue: "GRP987654", missing: "N", aiCallValue: "GRP987654", verifiedBy: "API" },
+  { saiCode: "VF000003", refInsCode: "D003", category: "Plan Information", fieldName: "Effective Date", preStepValue: "01/01/2024", missing: "N", aiCallValue: "01/01/2024", verifiedBy: "API" },
+  { saiCode: "VF000004", refInsCode: "D004", category: "Plan Information", fieldName: "Carrier Name", preStepValue: "Blue Cross Blue Shield", missing: "N", aiCallValue: "Blue Cross Blue Shield", verifiedBy: "API" },
+  { saiCode: "VF000005", refInsCode: "D005", category: "Plan Information", fieldName: "Member ID", preStepValue: "SUB123456789", missing: "N", aiCallValue: "SUB123456789", verifiedBy: "API" },
 
-type Step = 'step1' | 'step2' | 'step3' | 'idle';
-type StepStatus = 'pending' | 'in_progress' | 'completed';
+  // Verified fields - Deductible
+  { saiCode: "VF000051", refInsCode: "D051", category: "Deductible", fieldName: "Annual Deductible Amount", preStepValue: "0", missing: "N", aiCallValue: "$0 - No Deductible", verifiedBy: "API" },
+  { saiCode: "VF000052", refInsCode: "D052", category: "Deductible", fieldName: "Deductible Applies To", preStepValue: "Basic & Major", missing: "N", aiCallValue: "Basic & Major", verifiedBy: "API" },
+  { saiCode: "VF000053", refInsCode: "D053", category: "Deductible", fieldName: "Family Deductible", preStepValue: "$0", missing: "N", aiCallValue: "$0", verifiedBy: "API" },
 
-const CoverageVerificationResults: React.FC<CoverageVerificationResultsProps> = ({
-  isOpen,
-  onClose,
-  patientName = "Christopher James Davis",
-  patient,
-  onTransactionCreated
-}) => {
-  const { isApiEnabled } = useStediApi();
-  const [currentUser, setCurrentUser] = useState<any>(null);
-  const [currentStep, setCurrentStep] = useState<Step>('idle');
-  const [step1Status, setStep1Status] = useState<StepStatus>('pending');
-  const [step2Status, setStep2Status] = useState<StepStatus>('pending');
-  const [step3Status, setStep3Status] = useState<StepStatus>('pending');
+  // Verified fields - Preventative Coverage
+  { saiCode: "VF000010", refInsCode: "D010", category: "Preventative Coverage", fieldName: "Annual Cleaning Benefit", preStepValue: "2 Cleanings", missing: "N", aiCallValue: "2 Cleanings per Year", verifiedBy: "API" },
+  { saiCode: "VF000011", refInsCode: "D011", category: "Preventative Coverage", fieldName: "Annual Exams", preStepValue: "2 Exams", missing: "N", aiCallValue: "2 Exams per Year", verifiedBy: "API" },
+  { saiCode: "VF000012", refInsCode: "D012", category: "Preventative Coverage", fieldName: "X-ray Coverage", preStepValue: "1 FMS per 5 years", missing: "N", aiCallValue: "1 Full Mouth Series per 5 years", verifiedBy: "API" },
 
-  const [step1Text, setStep1Text] = useState("");
-  const [step2Text, setStep2Text] = useState("");
-  const [showCompletionToast, setShowCompletionToast] = useState(false);
-  const [verificationStartTime, setVerificationStartTime] = useState<Date | null>(null);
-  const [verificationEndTime, setVerificationEndTime] = useState<Date | null>(null);
+  // Verified fields - Basic Coverage
+  { saiCode: "VF000020", refInsCode: "D020", category: "Basic Coverage", fieldName: "Fillings Coverage", preStepValue: "80%", missing: "N", aiCallValue: "80%", verifiedBy: "API" },
+  { saiCode: "VF000021", refInsCode: "D021", category: "Basic Coverage", fieldName: "Extractions Coverage", preStepValue: "80%", missing: "N", aiCallValue: "80%", verifiedBy: "API" },
+  { saiCode: "VF000022", refInsCode: "D022", category: "Basic Coverage", fieldName: "Scaling & Root Planing", preStepValue: "80%", missing: "N", aiCallValue: "80%", verifiedBy: "API" },
 
-  // Sample API verification results data with verified and missing fields
-  const apiVerificationData: VerificationDataRow[] = [
-    // Verified fields - Plan Information
-    { saiCode: "VF000001", refInsCode: "D001", category: "Plan Information", fieldName: "Plan Name", preStepValue: "Blue Cross Dental Plus", missing: "N", aiCallValue: "Blue Cross Dental Plus", verifiedBy: "API" },
-    { saiCode: "VF000002", refInsCode: "D002", category: "Plan Information", fieldName: "Group Number", preStepValue: "GRP987654", missing: "N", aiCallValue: "GRP987654", verifiedBy: "API" },
-    { saiCode: "VF000003", refInsCode: "D003", category: "Plan Information", fieldName: "Effective Date", preStepValue: "01/01/2024", missing: "N", aiCallValue: "01/01/2024", verifiedBy: "API" },
-    { saiCode: "VF000004", refInsCode: "D004", category: "Plan Information", fieldName: "Carrier Name", preStepValue: "Blue Cross Blue Shield", missing: "N", aiCallValue: "Blue Cross Blue Shield", verifiedBy: "API" },
-    { saiCode: "VF000005", refInsCode: "D005", category: "Plan Information", fieldName: "Member ID", preStepValue: "SUB123456789", missing: "N", aiCallValue: "SUB123456789", verifiedBy: "API" },
+  // Verified fields - Major Coverage
+  { saiCode: "VF000030", refInsCode: "D030", category: "Major Coverage", fieldName: "Crowns Coverage", preStepValue: "50%", missing: "N", aiCallValue: "50%", verifiedBy: "API" },
+  { saiCode: "VF000031", refInsCode: "D031", category: "Major Coverage", fieldName: "Bridges Coverage", preStepValue: "50%", missing: "N", aiCallValue: "50%", verifiedBy: "API" },
+  { saiCode: "VF000032", refInsCode: "D032", category: "Major Coverage", fieldName: "Dentures Coverage", preStepValue: "50%", missing: "N", aiCallValue: "50%", verifiedBy: "API" },
+  { saiCode: "VF000033", refInsCode: "D033", category: "Major Coverage", fieldName: "Root Canals Coverage", preStepValue: "50%", missing: "N", aiCallValue: "50%", verifiedBy: "API" },
+  { saiCode: "VF000034", refInsCode: "D034", category: "Major Coverage", fieldName: "Implants Coverage", preStepValue: "Not Covered", missing: "N", aiCallValue: "Not Covered - Considered Cosmetic", verifiedBy: "API" },
 
-    // Verified fields - Deductible
-    { saiCode: "VF000051", refInsCode: "D051", category: "Deductible", fieldName: "Annual Deductible Amount", preStepValue: "0", missing: "N", aiCallValue: "$0 - No Deductible", verifiedBy: "API" },
-    { saiCode: "VF000052", refInsCode: "D052", category: "Deductible", fieldName: "Deductible Applies To", preStepValue: "Basic & Major", missing: "N", aiCallValue: "Basic & Major", verifiedBy: "API" },
-    { saiCode: "VF000053", refInsCode: "D053", category: "Deductible", fieldName: "Family Deductible", preStepValue: "$0", missing: "N", aiCallValue: "$0", verifiedBy: "API" },
+  // Verified fields - Annual Maximums
+  { saiCode: "VF000060", refInsCode: "D060", category: "Annual Maximum", fieldName: "Annual Maximum Benefit", preStepValue: "$1200", missing: "N", aiCallValue: "$1,200 per Year", verifiedBy: "API" },
+  { saiCode: "VF000061", refInsCode: "D061", category: "Annual Maximum", fieldName: "Ortho Maximum", preStepValue: "Not Included", missing: "N", aiCallValue: "Not Included", verifiedBy: "API" },
 
-    // Verified fields - Preventative Coverage
-    { saiCode: "VF000010", refInsCode: "D010", category: "Preventative Coverage", fieldName: "Annual Cleaning Benefit", preStepValue: "2 Cleanings", missing: "N", aiCallValue: "2 Cleanings per Year", verifiedBy: "API" },
-    { saiCode: "VF000011", refInsCode: "D011", category: "Preventative Coverage", fieldName: "Annual Exams", preStepValue: "2 Exams", missing: "N", aiCallValue: "2 Exams per Year", verifiedBy: "API" },
-    { saiCode: "VF000012", refInsCode: "D012", category: "Preventative Coverage", fieldName: "X-ray Coverage", preStepValue: "1 FMS per 5 years", missing: "N", aiCallValue: "1 Full Mouth Series per 5 years", verifiedBy: "API" },
+  // Missing fields - To verify during call
+  { saiCode: "VF000028", refInsCode: "D028", category: "Preventative Coverage", fieldName: "Prophylaxis/Exam Frequency", preStepValue: "", missing: "Y", aiCallValue: "", verifiedBy: "-" },
+  { saiCode: "VF000029", refInsCode: "D029", category: "Preventative Coverage", fieldName: "Last FMS Date", preStepValue: "", missing: "Y", aiCallValue: "", verifiedBy: "-" },
+  { saiCode: "VF000040", refInsCode: "D040", category: "Preventative Coverage", fieldName: "Eligible for FMS Now", preStepValue: "", missing: "Y", aiCallValue: "", verifiedBy: "-" },
+  { saiCode: "VF000041", refInsCode: "D041", category: "Preventative Coverage", fieldName: "FMS Frequency (Years)", preStepValue: "", missing: "Y", aiCallValue: "", verifiedBy: "-" },
+  { saiCode: "VF000042", refInsCode: "D042", category: "Preventative Coverage", fieldName: "Fluoride Varnish Frequency", preStepValue: "", missing: "Y", aiCallValue: "", verifiedBy: "-" },
+  { saiCode: "VF000045", refInsCode: "D045", category: "Major Coverage", fieldName: "Major Waiting Period", preStepValue: "", missing: "Y", aiCallValue: "", verifiedBy: "-" },
+  { saiCode: "VF000046", refInsCode: "D046", category: "Major Coverage", fieldName: "Major Services Effective Date", preStepValue: "", missing: "Y", aiCallValue: "", verifiedBy: "-" },
+  { saiCode: "VF000070", refInsCode: "D070", category: "Coverage Limits", fieldName: "Frequency Limitations", preStepValue: "", missing: "Y", aiCallValue: "", verifiedBy: "-" },
+];
 
-    // Verified fields - Basic Coverage
-    { saiCode: "VF000020", refInsCode: "D020", category: "Basic Coverage", fieldName: "Fillings Coverage", preStepValue: "80%", missing: "N", aiCallValue: "80%", verifiedBy: "API" },
-    { saiCode: "VF000021", refInsCode: "D021", category: "Basic Coverage", fieldName: "Extractions Coverage", preStepValue: "80%", missing: "N", aiCallValue: "80%", verifiedBy: "API" },
-    { saiCode: "VF000022", refInsCode: "D022", category: "Basic Coverage", fieldName: "Scaling & Root Planing", preStepValue: "80%", missing: "N", aiCallValue: "80%", verifiedBy: "API" },
-
-    // Verified fields - Major Coverage
-    { saiCode: "VF000030", refInsCode: "D030", category: "Major Coverage", fieldName: "Crowns Coverage", preStepValue: "50%", missing: "N", aiCallValue: "50%", verifiedBy: "API" },
-    { saiCode: "VF000031", refInsCode: "D031", category: "Major Coverage", fieldName: "Bridges Coverage", preStepValue: "50%", missing: "N", aiCallValue: "50%", verifiedBy: "API" },
-    { saiCode: "VF000032", refInsCode: "D032", category: "Major Coverage", fieldName: "Dentures Coverage", preStepValue: "50%", missing: "N", aiCallValue: "50%", verifiedBy: "API" },
-    { saiCode: "VF000033", refInsCode: "D033", category: "Major Coverage", fieldName: "Root Canals Coverage", preStepValue: "50%", missing: "N", aiCallValue: "50%", verifiedBy: "API" },
-    { saiCode: "VF000034", refInsCode: "D034", category: "Major Coverage", fieldName: "Implants Coverage", preStepValue: "Not Covered", missing: "N", aiCallValue: "Not Covered - Considered Cosmetic", verifiedBy: "API" },
-
-    // Verified fields - Annual Maximums
-    { saiCode: "VF000060", refInsCode: "D060", category: "Annual Maximum", fieldName: "Annual Maximum Benefit", preStepValue: "$1200", missing: "N", aiCallValue: "$1,200 per Year", verifiedBy: "API" },
-    { saiCode: "VF000061", refInsCode: "D061", category: "Annual Maximum", fieldName: "Ortho Maximum", preStepValue: "Not Included", missing: "N", aiCallValue: "Not Included", verifiedBy: "API" },
-
-    // Missing fields - To verify during call
-    { saiCode: "VF000028", refInsCode: "D028", category: "Preventative Coverage", fieldName: "Prophylaxis/Exam Frequency", preStepValue: "", missing: "Y", aiCallValue: "", verifiedBy: "-" },
-    { saiCode: "VF000029", refInsCode: "D029", category: "Preventative Coverage", fieldName: "Last FMS Date", preStepValue: "", missing: "Y", aiCallValue: "", verifiedBy: "-" },
-    { saiCode: "VF000040", refInsCode: "D040", category: "Preventative Coverage", fieldName: "Eligible for FMS Now", preStepValue: "", missing: "Y", aiCallValue: "", verifiedBy: "-" },
-    { saiCode: "VF000041", refInsCode: "D041", category: "Preventative Coverage", fieldName: "FMS Frequency (Years)", preStepValue: "", missing: "Y", aiCallValue: "", verifiedBy: "-" },
-    { saiCode: "VF000042", refInsCode: "D042", category: "Preventative Coverage", fieldName: "Fluoride Varnish Frequency", preStepValue: "", missing: "Y", aiCallValue: "", verifiedBy: "-" },
-    { saiCode: "VF000045", refInsCode: "D045", category: "Major Coverage", fieldName: "Major Waiting Period", preStepValue: "", missing: "Y", aiCallValue: "", verifiedBy: "-" },
-    { saiCode: "VF000046", refInsCode: "D046", category: "Major Coverage", fieldName: "Major Services Effective Date", preStepValue: "", missing: "Y", aiCallValue: "", verifiedBy: "-" },
-    { saiCode: "VF000070", refInsCode: "D070", category: "Coverage Limits", fieldName: "Frequency Limitations", preStepValue: "", missing: "Y", aiCallValue: "", verifiedBy: "-" },
-  ];
-
-  // Refs for auto-scrolling
-  const contentRef = useRef<HTMLDivElement>(null);
-  const step1Ref = useRef<HTMLDivElement>(null);
-  const step2Ref = useRef<HTMLDivElement>(null);
-  const step3Ref = useRef<HTMLDivElement>(null);
-
-  // Sample API JSON response
-  const apiResponse = JSON.stringify({
-    "verification_id": "VER-2025-001234",
-    "timestamp": "2025-01-21T10:30:45Z",
-    "patient": {
-      "name": "Christopher James Davis",
-      "dob": "1985-03-15",
-      "member_id": "BCBS123456789"
-    },
-    "insurance": {
-      "carrier": "Blue Cross Blue Shield",
-      "group_number": "GRP987654",
-      "policy_status": "active",
-      "effective_date": "2024-01-01",
-      "plan_type": "PPO Premium"
-    },
-    "eligibility": {
-      "active": true,
-      "coverage_status": "verified",
-      "verification_date": "2025-01-21"
-    },
-    "benefits": {
-      "annual_maximum": 2000,
-      "annual_used": 450,
-      "annual_remaining": 1550,
-      "deductible": 50,
-      "deductible_met": 50,
-      "preventive_coverage": "100%",
-      "basic_coverage": "80%",
-      "major_coverage": "50%",
-      "waiting_periods": {
-        "preventive": "none",
-        "basic": "none",
-        "major": "12 months"
-      }
+// Sample API JSON response - moved outside component for performance
+const SAMPLE_API_RESPONSE = JSON.stringify({
+  "verification_id": "VER-2025-001234",
+  "timestamp": "2025-01-21T10:30:45Z",
+  "patient": {
+    "name": "Christopher James Davis",
+    "dob": "1985-03-15",
+    "member_id": "BCBS123456789"
+  },
+  "insurance": {
+    "carrier": "Blue Cross Blue Shield",
+    "group_number": "GRP987654",
+    "policy_status": "active",
+    "effective_date": "2024-01-01",
+    "plan_type": "PPO Premium"
+  },
+  "eligibility": {
+    "active": true,
+    "coverage_status": "verified",
+    "verification_date": "2025-01-21"
+  },
+  "benefits": {
+    "annual_maximum": 2000,
+    "annual_used": 450,
+    "annual_remaining": 1550,
+    "deductible": 50,
+    "deductible_met": 50,
+    "preventive_coverage": "100%",
+    "basic_coverage": "80%",
+    "major_coverage": "50%",
+    "waiting_periods": {
+      "preventive": "none",
+      "basic": "none",
+      "major": "12 months"
     }
-  }, null, 2);
+  }
+}, null, 2);
 
-  // Sample code-level coverage data
-  const codeLevelData = `COVERAGE BY CODE VIEW - DETAILED ANALYSIS
+// Sample code-level coverage data - moved outside component for performance
+const CODE_LEVEL_DATA = `COVERAGE BY CODE VIEW - DETAILED ANALYSIS
 
 Preventive Services (100% Coverage):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -166,8 +129,56 @@ Remaining:              $1,550.00
 Deductible:             $50.00 (Met)
 Plan Renewal:           January 1st`;
 
+interface CoverageVerificationResultsProps {
+  isOpen: boolean;
+  onClose: () => void;
+  patientName?: string;
+  patient?: Patient;
+  onTransactionCreated?: () => void;
+}
+
+type Step = 'step1' | 'step2' | 'step3' | 'idle';
+type StepStatus = 'pending' | 'in_progress' | 'completed';
+
+const CoverageVerificationResults: React.FC<CoverageVerificationResultsProps> = ({
+  isOpen,
+  onClose,
+  patientName = "Christopher James Davis",
+  patient,
+  onTransactionCreated
+}) => {
+  const { isApiEnabled } = useStediApi();
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentStep, setCurrentStep] = useState<Step>('idle');
+  const [step1Status, setStep1Status] = useState<StepStatus>('pending');
+  const [step2Status, setStep2Status] = useState<StepStatus>('pending');
+  const [step3Status, setStep3Status] = useState<StepStatus>('pending');
+
+  const [step1Text, setStep1Text] = useState("");
+  const [step2Text, setStep2Text] = useState("");
+  const [showCompletionToast, setShowCompletionToast] = useState(false);
+  const [verificationStartTime, setVerificationStartTime] = useState<Date | null>(null);
+  const [verificationEndTime, setVerificationEndTime] = useState<Date | null>(null);
+
+  // Memoized filter results to avoid redundant calculations
+  const verifiedFields = useMemo(
+    () => API_VERIFICATION_DATA.filter(r => r.missing === 'N'),
+    []
+  );
+  const verifiedFieldsCount = verifiedFields.length;
+  const missingFieldsCount = useMemo(
+    () => API_VERIFICATION_DATA.filter(r => r.missing === 'Y').length,
+    []
+  );
+
+  // Refs for auto-scrolling
+  const contentRef = useRef<HTMLDivElement>(null);
+  const step1Ref = useRef<HTMLDivElement>(null);
+  const step2Ref = useRef<HTMLDivElement>(null);
+  const step3Ref = useRef<HTMLDivElement>(null);
+
   // Auto-scroll to active step
-  const scrollToStep = (stepRef: React.RefObject<HTMLDivElement>) => {
+  const scrollToStep = (stepRef: React.RefObject<HTMLDivElement | null>) => {
     if (stepRef.current && contentRef.current) {
       const stepElement = stepRef.current;
       const contentElement = contentRef.current;
@@ -192,36 +203,69 @@ Plan Renewal:           January 1st`;
     }
   }, [currentStep, step1Status, step2Status]);
 
-  // Auto-scroll during typing to keep cursor visible
+  // Throttled auto-scroll during typing to prevent layout thrashing
+  const scrollTimeoutRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (step1Status === 'in_progress' && contentRef.current) {
-      contentRef.current.scrollTop = contentRef.current.scrollHeight;
+      if (scrollTimeoutRef.current) return; // Skip if already scheduled
+      scrollTimeoutRef.current = window.setTimeout(() => {
+        if (contentRef.current) {
+          contentRef.current.scrollTop = contentRef.current.scrollHeight;
+        }
+        scrollTimeoutRef.current = null;
+      }, 50); // Throttle to every 50ms
     }
-  }, [step1Text]);
+  }, [step1Text, step1Status]);
 
   useEffect(() => {
     if (step2Status === 'in_progress' && contentRef.current) {
-      contentRef.current.scrollTop = contentRef.current.scrollHeight;
+      if (scrollTimeoutRef.current) return; // Skip if already scheduled
+      scrollTimeoutRef.current = window.setTimeout(() => {
+        if (contentRef.current) {
+          contentRef.current.scrollTop = contentRef.current.scrollHeight;
+        }
+        scrollTimeoutRef.current = null;
+      }, 50); // Throttle to every 50ms
     }
-  }, [step2Text]);
+  }, [step2Text, step2Status]);
 
-  // Typing animation effect
+  // Optimized typing animation using requestAnimationFrame and chunk updates
   const typeText = (
     fullText: string,
     setText: (text: string) => void,
     speed: number = 10
   ): Promise<void> => {
     return new Promise((resolve) => {
+      // If speed is 0 or very low, just set the text immediately for best performance
+      if (speed === 0) {
+        setText(fullText);
+        resolve();
+        return;
+      }
+
       let index = 0;
-      const intervalId = setInterval(() => {
-        if (index <= fullText.length) {
-          setText(fullText.substring(0, index));
-          index++;
-        } else {
-          clearInterval(intervalId);
-          resolve();
+      let lastUpdateTime = performance.now();
+      const charsPerFrame = Math.max(1, Math.floor(100 / speed)); // Adaptive chunk size
+
+      const animate = (currentTime: number) => {
+        const elapsed = currentTime - lastUpdateTime;
+
+        if (elapsed >= speed) {
+          lastUpdateTime = currentTime;
+          index = Math.min(index + charsPerFrame, fullText.length);
+          setText(fullText.slice(0, index));
+
+          if (index >= fullText.length) {
+            resolve();
+            return;
+          }
         }
-      }, speed);
+
+        requestAnimationFrame(animate);
+      };
+
+      requestAnimationFrame(animate);
     });
   };
 
@@ -260,8 +304,7 @@ Plan Renewal:           January 1st`;
         ? `${duration}s`
         : `${Math.floor(duration / 60)}m ${duration % 60}s`;
 
-      const verifiedFields = apiVerificationData.filter(r => r.missing === 'N');
-      const verificationScore = Math.round((verifiedFields.length / apiVerificationData.length) * 100);
+      const verificationScore = Math.round((verifiedFields.length / API_VERIFICATION_DATA.length) * 100);
 
       // Get insurance provider from patient data
       let insuranceProvider = '-';
@@ -370,7 +413,7 @@ Plan Renewal:           January 1st`;
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          coverageData: apiVerificationData,
+          coverageData: API_VERIFICATION_DATA,
           dataMode,
           stediTest
         })
@@ -436,9 +479,9 @@ Plan Renewal:           January 1st`;
       // Step 1: Get API Result from Stedi
       setCurrentStep('step1');
       setStep1Status('in_progress');
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 50)); // Reduced from 100ms
 
-      let apiResponseText = apiResponse;
+      let apiResponseText = SAMPLE_API_RESPONSE;
 
       // Call Stedi API if patient data is available
       if (patient && (patient as any).insurance && (patient as any).insurance.length > 0) {
@@ -467,23 +510,20 @@ Plan Renewal:           January 1st`;
       }
 
       await typeText(apiResponseText, setStep1Text, 0);
-      await new Promise(resolve => setTimeout(resolve, 50));
       setStep1Status('completed');
 
       // Step 2: Analyze and convert to code-level
-      await new Promise(resolve => setTimeout(resolve, 150));
+      await new Promise(resolve => setTimeout(resolve, 100)); // Reduced from 150ms
       setCurrentStep('step2');
       setStep2Status('in_progress');
-      await new Promise(resolve => setTimeout(resolve, 100));
-      await typeText(codeLevelData, setStep2Text, 0);
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await typeText(CODE_LEVEL_DATA, setStep2Text, 0);
       setStep2Status('completed');
 
       // Step 3: Display verification results in table format
-      await new Promise(resolve => setTimeout(resolve, 150));
+      await new Promise(resolve => setTimeout(resolve, 100)); // Reduced from 150ms
       setCurrentStep('step3');
       setStep3Status('in_progress');
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 50)); // Reduced from 100ms
       setStep3Status('completed');
     } catch (error) {
       setStep1Status('completed');
@@ -695,7 +735,7 @@ Plan Renewal:           January 1st`;
               </div>
               {step3Status !== 'pending' && (
                 <VerificationDataPanel
-                  data={apiVerificationData}
+                  data={API_VERIFICATION_DATA}
                   showTabs={true}
                   title="API Verification Results"
                   subtitle="Watching"
@@ -749,7 +789,7 @@ Plan Renewal:           January 1st`;
                   API Verification Complete
                 </h4>
                 <p className="text-sm text-blue-700 dark:text-blue-300">
-                  The API run has successfully verified coverage details. However, {apiVerificationData.filter(r => r.missing === 'Y').length} fields are still missing and require voice AI verification.
+                  The API run has successfully verified coverage details. However, {missingFieldsCount} fields are still missing and require voice AI verification.
                 </p>
               </div>
             </div>
@@ -758,11 +798,11 @@ Plan Renewal:           January 1st`;
             <div className="px-6 py-4 space-y-3">
               <div className="flex items-center gap-3 text-sm">
                 <span className="material-symbols-outlined text-green-600 dark:text-green-400 flex-shrink-0">check_circle</span>
-                <span className="text-slate-700 dark:text-slate-300"><strong>Verified:</strong> {apiVerificationData.filter(r => r.missing === 'N').length} fields successfully verified via API</span>
+                <span className="text-slate-700 dark:text-slate-300"><strong>Verified:</strong> {verifiedFieldsCount} fields successfully verified via API</span>
               </div>
               <div className="flex items-center gap-3 text-sm">
                 <span className="material-symbols-outlined text-status-red flex-shrink-0">pending</span>
-                <span className="text-slate-700 dark:text-slate-300"><strong>Still Missing:</strong> {apiVerificationData.filter(r => r.missing === 'Y').length} fields need voice AI verification</span>
+                <span className="text-slate-700 dark:text-slate-300"><strong>Still Missing:</strong> {missingFieldsCount} fields need voice AI verification</span>
               </div>
             </div>
 

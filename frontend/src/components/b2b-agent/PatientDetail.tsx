@@ -986,9 +986,13 @@ const PatientDetail: React.FC<PatientDetailProps> = ({
                       placeholder="123 Main St, City, State ZIP"
                     />
                   ) : (
-                    <p className="font-medium text-slate-800 dark:text-slate-100">
-                      {getAddress()}
-                    </p>
+                    <SensitiveDataField
+                      patientId={patient.id}
+                      fieldName="address"
+                      maskedValue="**** **** ******, ****, ** *****"
+                      label="Address"
+                      isEncrypted={(patient.address && patient.address.length > 0) || false}
+                    />
                   )}
                 </div>
               </div>
@@ -1026,25 +1030,6 @@ const PatientDetail: React.FC<PatientDetailProps> = ({
                       </h3>
                     </div>
                     <div className="p-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <div>
-                        <label className="text-sm text-slate-500 dark:text-slate-400 mb-2 block">
-                          Type
-                        </label>
-                        {isEditing ? (
-                          <select
-                            value={ins.type}
-                            onChange={(e) => handleInsuranceChange(index, 'type', e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-                          >
-                            <option value="Primary">Primary</option>
-                            <option value="Secondary">Secondary</option>
-                          </select>
-                        ) : (
-                          <p className="font-medium text-slate-800 dark:text-slate-100">
-                            {ins.type}
-                          </p>
-                        )}
-                      </div>
                       <div>
                         <label className="text-sm text-slate-500 dark:text-slate-400 mb-2 block">
                           Provider
@@ -1106,6 +1091,29 @@ const PatientDetail: React.FC<PatientDetailProps> = ({
                             maskedValue={ins.groupNumber || '********'}
                             label="Group Number"
                             isEncrypted={(ins as any).groupNumberEncrypted || false}
+                          />
+                        )}
+                      </div>
+                      <div>
+                        <label className="text-sm text-slate-500 dark:text-slate-400 mb-2 block">
+                          Subscriber ID
+                        </label>
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={ins.subscriberId}
+                            onChange={(e) => handleInsuranceChange(index, 'subscriberId', e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                            placeholder="Subscriber ID"
+                          />
+                        ) : (
+                          <InsuranceSensitiveDataField
+                            patientId={patient.id}
+                            insuranceId={(ins as any).id || ''}
+                            fieldName="subscriberId"
+                            maskedValue={ins.subscriberId || '**********'}
+                            label="Subscriber ID"
+                            isEncrypted={(ins as any).subscriberIdEncrypted || false}
                           />
                         )}
                       </div>
@@ -1280,6 +1288,19 @@ const PatientDetail: React.FC<PatientDetailProps> = ({
                           maskedValue={ins.groupNumber || '********'}
                           label="Group Number"
                           isEncrypted={(ins as any).groupNumberEncrypted || false}
+                        />
+                      </div>
+                      <div>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">
+                          Subscriber ID
+                        </p>
+                        <InsuranceSensitiveDataField
+                          patientId={patient.id}
+                          insuranceId={(ins as any).id || ''}
+                          fieldName="subscriberId"
+                          maskedValue={ins.subscriberId || '**********'}
+                          label="Subscriber ID"
+                          isEncrypted={(ins as any).subscriberIdEncrypted || false}
                         />
                       </div>
                       <div>

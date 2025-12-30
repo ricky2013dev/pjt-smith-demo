@@ -23,6 +23,10 @@ import {
   callCommunications,
   transactionDataVerified,
   coverageByCode,
+  ifCallTransactionList,
+  ifCallCoverageCodeList,
+  ifCallMessageList,
+  aiCallHistory,
   type CoverageDetail,
   type Procedure,
   type Transaction,
@@ -162,6 +166,44 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deletePatient(id: string): Promise<boolean> {
+    // Delete in order from most dependent to least dependent
+    // This ensures we don't hit foreign key constraint errors
+
+    // 1. Delete interface table records (no FK constraints to patient)
+    // First delete child records, then parent records
+    const ifTransactions = await db.select().from(ifCallTransactionList).where(eq(ifCallTransactionList.patientId, id));
+    for (const ifTxn of ifTransactions) {
+      await db.delete(ifCallMessageList).where(eq(ifCallMessageList.ifCallTransactionId, ifTxn.id));
+      await db.delete(ifCallCoverageCodeList).where(eq(ifCallCoverageCodeList.ifCallTransactionId, ifTxn.id));
+    }
+    await db.delete(ifCallTransactionList).where(eq(ifCallTransactionList.patientId, id));
+
+    // 2. Delete transaction-related child records
+    const patientTransactions = await db.select().from(transactions).where(eq(transactions.patientId, id));
+    for (const txn of patientTransactions) {
+      await db.delete(callCommunications).where(eq(callCommunications.transactionId, txn.id));
+      await db.delete(transactionDataVerified).where(eq(transactionDataVerified.transactionId, txn.id));
+    }
+
+    // 3. Delete coverage-related child records
+    const patientCoverageDetails = await db.select().from(coverageDetails).where(eq(coverageDetails.patientId, id));
+    for (const coverage of patientCoverageDetails) {
+      await db.delete(procedures).where(eq(procedures.coverageId, coverage.id));
+    }
+
+    // 4. Delete remaining patient-related records (these have FK to patient)
+    await db.delete(coverageByCode).where(eq(coverageByCode.patientId, id));
+    await db.delete(aiCallHistory).where(eq(aiCallHistory.patientId, id));
+    await db.delete(transactions).where(eq(transactions.patientId, id));
+    await db.delete(coverageDetails).where(eq(coverageDetails.patientId, id));
+    await db.delete(verificationStatuses).where(eq(verificationStatuses.patientId, id));
+    await db.delete(treatments).where(eq(treatments.patientId, id));
+    await db.delete(appointments).where(eq(appointments.patientId, id));
+    await db.delete(insurances).where(eq(insurances.patientId, id));
+    await db.delete(patientAddresses).where(eq(patientAddresses.patientId, id));
+    await db.delete(patientTelecoms).where(eq(patientTelecoms.patientId, id));
+
+    // 5. Finally delete the patient record
     const result = await db.delete(patients).where(eq(patients.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
   }
