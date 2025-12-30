@@ -6,9 +6,14 @@ import { createServer } from "http";
 import session from "express-session";
 import swaggerUi from "swagger-ui-express";
 import { swaggerSpec } from "./swagger";
+import connectPgSimple from "connect-pg-simple";
+import pg from "pg";
 
 const app = express();
 const httpServer = createServer(app);
+
+// Trust proxy for Replit's reverse proxy
+app.set("trust proxy", 1);
 
 declare module "http" {
   interface IncomingMessage {
@@ -25,15 +30,27 @@ declare global {
   }
 }
 
+// Setup PostgreSQL session store for production persistence
+const PgSession = connectPgSimple(session);
+const pgPool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
 app.use(
   session({
+    store: new PgSession({
+      pool: pgPool,
+      tableName: "user_sessions",
+      createTableIfMissing: true,
+    }),
     secret: process.env.SESSION_SECRET || "your-secret-key-change-in-production",
     resave: false,
     saveUninitialized: false,
     cookie: {
       secure: process.env.NODE_ENV === "production",
       httpOnly: true,
-      maxAge: 1000 * 60 * 60 * 24
+      maxAge: 1000 * 60 * 60 * 24,
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     }
   })
 );
@@ -113,7 +130,7 @@ app.use((req, res, next) => {
   httpServer.listen(
     {
       port,
-      host: "127.0.0.1",
+      host: "0.0.0.0",
     },
     () => {
       log(`serving on port ${port}`);
