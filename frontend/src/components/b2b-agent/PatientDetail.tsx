@@ -520,22 +520,24 @@ const PatientDetail: React.FC<PatientDetailProps> = ({
               API Verification
             </button>
 
-            {/* Request Insurance Fax */}
-            <button
-              onClick={() => {
-                // Call the global openFaxModal function exposed by SmartAITransactionHistory
-                if (window.openFaxModal) {
-                  window.openFaxModal();
-                  // Also navigate to the AI Call History tab to show the modal
-                  onTabChange(TAB_TYPES.AI_CALL_HISTORY);
-                }
-              }}
-              className="ml-3 px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-medium transition-colors bg-slate-900 dark:bg-slate-800 text-white hover:bg-slate-800 dark:hover:bg-slate-700"
-              title="Request insurance fax document"
-            >
-              <span className="material-symbols-outlined text-base">description</span>
-              Fax Document
-            </button>
+            {/* Request Insurance Fax - Hidden when Data Mode is ON */}
+            {!currentUser?.dataSource && (
+              <button
+                onClick={() => {
+                  // Call the global openFaxModal function exposed by SmartAITransactionHistory
+                  if (window.openFaxModal) {
+                    window.openFaxModal();
+                    // Also navigate to the AI Call History tab to show the modal
+                    onTabChange(TAB_TYPES.AI_CALL_HISTORY);
+                  }
+                }}
+                className="ml-3 px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-medium transition-colors bg-slate-900 dark:bg-slate-800 text-white hover:bg-slate-800 dark:hover:bg-slate-700"
+                title="Request insurance fax document"
+              >
+                <span className="material-symbols-outlined text-base">description</span>
+                Fax Document
+              </button>
+            )}
 
 
             {/* Step  Start AI Call */}
