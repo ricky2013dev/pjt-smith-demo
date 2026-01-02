@@ -328,11 +328,9 @@ The application is fully typed with TypeScript. Database types are automatically
 
 ## Additional Documentation
 
-- `ADMIN_FEATURES.md` - Comprehensive admin panel feature documentation
 - `DOCKER_SETUP.md` - Docker setup guide for local development
 - `HIPAA_SENSITIVE_DATA_GUIDE.md` - HIPAA compliance and access control guidelines
 - `MOCKUPDATA_README.md` - Sample data documentation
-- `../CHANGELOG.md` - Version history and recent changes
 
 ## License
 MIT

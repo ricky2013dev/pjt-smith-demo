@@ -152,9 +152,7 @@ WHERE table_name LIKE 'if_call%' AND constraint_type = 'FOREIGN KEY';
 ## 🔗 Related Documentation
 
 - Main Documentation: `doc/README.md`
-- Admin Features: `doc/ADMIN_FEATURES.md`
 - HIPAA Guide: `doc/HIPAA_SENSITIVE_DATA_GUIDE.md`
-- Changelog: `CHANGELOG.md`
 
 ---
 **Last Updated**: 2025-01-30
